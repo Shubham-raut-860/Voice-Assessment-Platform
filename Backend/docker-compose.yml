@@ -1,0 +1,86 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: voice_assessment
+      POSTGRES_USER: voice_assessment
+      POSTGRES_PASSWORD: ${VOICE_ASSESSMENT_POSTGRES_PASSWORD:?set VOICE_ASSESSMENT_POSTGRES_PASSWORD}
+    ports:
+      - "55432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U voice_assessment -d voice_assessment"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "56379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://voice_assessment:${VOICE_ASSESSMENT_POSTGRES_PASSWORD:?set VOICE_ASSESSMENT_POSTGRES_PASSWORD}@postgres:5432/voice_assessment
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=5)",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  migrate:
+    build:
+      context: .
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://voice_assessment:${VOICE_ASSESSMENT_POSTGRES_PASSWORD:?set VOICE_ASSESSMENT_POSTGRES_PASSWORD}@postgres:5432/voice_assessment
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["alembic", "upgrade", "head"]
+
+  report-worker:
+    build:
+      context: .
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://voice_assessment:${VOICE_ASSESSMENT_POSTGRES_PASSWORD:?set VOICE_ASSESSMENT_POSTGRES_PASSWORD}@postgres:5432/voice_assessment
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      api:
+        condition: service_healthy
+    command: ["voice-report-worker", "--batch-size", "5", "--poll-seconds", "10"]
+
+volumes:
+  postgres_data:
+  redis_data:

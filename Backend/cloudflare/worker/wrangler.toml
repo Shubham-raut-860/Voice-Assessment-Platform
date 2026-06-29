@@ -1,0 +1,15 @@
+name = "voice-assessment-edge"
+main = "src/index.ts"
+compatibility_date = "2026-05-30"
+account_id = "747b5c125ddb707002d5fd07d187464b"
+
+[vars]
+API_ORIGIN = "http://127.0.0.1:8001"
+ALLOWED_ORIGINS = "http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001,http://localhost:5173,http://127.0.0.1:5173"
+ENVIRONMENT = "development"
+
+[env.staging]
+name = "voice-assessment-edge-staging"
+
+[env.production]
+name = "voice-assessment-edge-production"
